@@ -375,6 +375,8 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
 {
     char magic[5];
     priv_t *wav = (priv_t *) ft->priv;
+    
+    lsx_debug("Searching for %2x %2x %2x %2x", Label[0], Label[1], Label[2], Label[3]);
     for (;;)
     {
         if (lsx_reads(ft, magic, (size_t)4) == SOX_EOF)
@@ -383,7 +385,6 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
                           Label);
             return SOX_EOF;
         }
-        lsx_debug("WAV Chunk %s", magic);
         if (lsx_readdw(ft, len) == SOX_EOF)
         {
             lsx_fail_errno(ft, SOX_EHDR, "WAVE file %s chunk is too short",
@@ -391,10 +392,11 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
             return SOX_EOF;
         }
 
+        lsx_debug("WAV Chunk %2x %2x %2x %2x size=%x", magic[0], magic[1], magic[2], magic[3], *len);
         if (strncmp(Label, magic, (size_t)4) == 0)
             break; /* Found the given chunk */
 
-        if (len == 0xffffffff && wav->isRF64==sox_true) {
+        if (*len == 0xffffffff && wav->isRF64==sox_true) {
             /* Indicates invalid size */
             lsx_fail_errno(ft, SOX_EHDR, "WAVE file has missing %s chunk",
                           Label);
@@ -444,7 +446,7 @@ static int startread(sox_format_t * ft)
     uint32_t wFmtSize;
     uint16_t wExtSize = 0;    /* extended field for non-PCM */
 
-    uint32_t      dwDataLength;    /* length of sound data in bytes */
+    uint64_t      dwDataLength;    /* length of sound data in bytes */
     size_t    bytesPerBlock = 0;
     int    bytespersample;          /* bytes per sample (per channel */
     char text[256];
@@ -483,6 +485,17 @@ static int startread(sox_format_t * ft)
     {
         lsx_fail_errno(ft,SOX_EHDR,"WAVE header not found");
         return SOX_EOF;
+    }
+
+    if (wav->isRF64 && findChunk(ft, "ds64", &len) != SOX_EOF) {
+
+        lsx_debug("Found ds64 header");
+        /* XXX dwRiffLength not updated as it is not currently used */
+
+        lsx_skipbytes(ft, (size_t)8);
+        lsx_readqw(ft, &dwDataLength);
+
+        lsx_skipbytes(ft, (size_t)len-16);
     }
 
     /* Now look for the format chunk */
@@ -822,7 +835,15 @@ static int startread(sox_format_t * ft)
         lsx_fail_errno(ft, SOX_EOF, "Could not find data chunk.");
         return SOX_EOF;
     }
-    dwDataLength = len;
+
+    if (wav->isRF64==sox_true && len == 0xffffffff)
+    {
+        /* data length came from ds64 chunk */
+    }
+    else {
+        dwDataLength = len;
+    }
+
     if (dwDataLength == MS_UNSPEC) {
       wav->ignoreSize = 1;
       lsx_debug("WAV Chunk data's length is value often used in pipes or 4G files.  Ignoring length.");
@@ -914,7 +935,7 @@ static int startread(sox_format_t * ft)
          * doubt any machine writing Cool Edit Chunks writes them at an odd
          * offset */
         len = (len + 1) & ~1u;
-        if (lsx_seeki(ft, (off_t)len, SEEK_CUR) == SOX_SUCCESS &&
+        if (!wav->isRF64 && lsx_seeki(ft, (off_t)len, SEEK_CUR) == SOX_SUCCESS &&
             findChunk(ft, "LIST", &len) != SOX_EOF)
         {
             wav->comment = lsx_malloc((size_t)256);
