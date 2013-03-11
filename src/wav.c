@@ -94,6 +94,7 @@ typedef struct {
     gsm_signal     *gsmsample;
     int            gsmindex;
     size_t      gsmbytecount;    /* counts bytes written to data block */
+    sox_bool       isRF64;          /* True if file being read is a RF64 */
 } priv_t;
 
 static char *wav_format_str(unsigned wFormatTag);
@@ -373,6 +374,7 @@ static void wavgsmstopwrite(sox_format_t * ft)
 static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
 {
     char magic[5];
+    priv_t *wav = (priv_t *) ft->priv;
     for (;;)
     {
         if (lsx_reads(ft, magic, (size_t)4) == SOX_EOF)
@@ -391,6 +393,13 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
 
         if (strncmp(Label, magic, (size_t)4) == 0)
             break; /* Found the given chunk */
+
+        if (len == -1 && wav->isRF64==sox_true) {
+            /* Indicates invalid size */
+            lsx_fail_errno(ft, SOX_EHDR, "WAVE file has missing %s chunk",
+                          Label);
+            return SOX_EOF;
+        }
 
 	/* Chunks are required to be word aligned. */
 	if ((*len) % 2) (*len)++;
@@ -458,6 +467,15 @@ static int startread(sox_format_t * ft)
         ft->encoding.reverse_bytes = MACHINE_IS_LITTLEENDIAN;
     }
     else ft->encoding.reverse_bytes = MACHINE_IS_BIGENDIAN;
+
+    if (strncmp("RF64", magic, (size_t)4) == 0)
+    {
+        wav->isRF64 = sox_true;
+    }
+    else
+    {
+        wav->isRF64 = sox_false;
+    }
 
     lsx_readdw(ft, &dwRiffLength);
 
