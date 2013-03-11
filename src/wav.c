@@ -860,7 +860,7 @@ static int startread(sox_format_t * ft)
         wav->numSamples =
             lsx_ms_adpcm_samples_in((size_t)dwDataLength, (size_t)ft->signal.channels,
                            (size_t)wav->blockAlign, (size_t)wav->samplesPerBlock);
-        lsx_debug_more("datalen %d, numSamples %lu",dwDataLength, (unsigned long)wav->numSamples);
+        lsx_debug_more("datalen %ld, numSamples %lu",dwDataLength, (unsigned long)wav->numSamples);
         wav->blockSamplesRemaining = 0;        /* Samples left in buffer */
         ft->signal.length = wav->numSamples*ft->signal.channels;
         break;
@@ -871,7 +871,7 @@ static int startread(sox_format_t * ft)
         wav->numSamples =
             lsx_ima_samples_in((size_t)dwDataLength, (size_t)ft->signal.channels,
                          (size_t)wav->blockAlign, (size_t)wav->samplesPerBlock);
-        lsx_debug_more("datalen %d, numSamples %lu",dwDataLength, (unsigned long)wav->numSamples);
+        lsx_debug_more("datalen %ld, numSamples %lu",dwDataLength, (unsigned long)wav->numSamples);
         wav->blockSamplesRemaining = 0;        /* Samples left in buffer */
         lsx_ima_init_table();
         ft->signal.length = wav->numSamples*ft->signal.channels;
@@ -897,7 +897,7 @@ static int startread(sox_format_t * ft)
     lsx_debug("Reading Wave file: %s format, %d channel%s, %d samp/sec",
            wav_format_str(wav->formatTag), ft->signal.channels,
            wChannels == 1 ? "" : "s", dwSamplesPerSecond);
-    lsx_debug("        %d byte/sec, %d block align, %d bits/samp, %u data bytes",
+    lsx_debug("        %d byte/sec, %d block align, %d bits/samp, %lu data bytes",
            dwAvgBytesPerSec, wav->blockAlign, wBitsPerSample, dwDataLength);
 
     /* Can also report extended fmt information */
