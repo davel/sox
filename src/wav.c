@@ -394,7 +394,7 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
         if (strncmp(Label, magic, (size_t)4) == 0)
             break; /* Found the given chunk */
 
-        if (len == -1 && wav->isRF64==sox_true) {
+        if (len == 0xffffffff && wav->isRF64==sox_true) {
             /* Indicates invalid size */
             lsx_fail_errno(ft, SOX_EHDR, "WAVE file has missing %s chunk",
                           Label);
