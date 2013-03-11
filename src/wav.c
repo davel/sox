@@ -445,7 +445,7 @@ static int startread(sox_format_t * ft)
     wav->ignoreSize = ft->signal.length == SOX_IGNORE_LENGTH;
 
     if (lsx_reads(ft, magic, (size_t)4) == SOX_EOF || (strncmp("RIFF", magic, (size_t)4) != 0 &&
-                                             strncmp("RIFX", magic, (size_t)4) != 0))
+                                             strncmp("RIFX", magic, (size_t)4) != 0 && strncmp("RF64", magic, (size_t)4)!=0 ))
     {
         lsx_fail_errno(ft,SOX_EHDR,"WAVE: RIFF header not found");
         return SOX_EOF;
