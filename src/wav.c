@@ -95,6 +95,7 @@ typedef struct {
     int            gsmindex;
     size_t      gsmbytecount;    /* counts bytes written to data block */
     sox_bool       isRF64;          /* True if file being read is a RF64 */
+    uint64_t       ds64_dataSize;   /* Size of data chunk from ds64 header */
 } priv_t;
 
 static char *wav_format_str(unsigned wFormatTag);
@@ -392,16 +393,23 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
             return SOX_EOF;
         }
 
+        if (*len == 0xffffffff && wav->isRF64==sox_true)
+        {
+            /* Chunk length should come from ds64 header */
+            if (strcmp(magic, "data")==0)
+            {
+                *len = wav->ds64_dataSize;
+            }
+            else
+            {
+                lsx_fail_errno(ft, SOX_EHDR, "Cannot yet read block sizes of arbitary RF64 chunks, cannot find chunk '%s'", Label);
+                return SOX_EOF;
+            }
+        }
+
         lsx_debug("WAV Chunk %2x %2x %2x %2x size=%x", magic[0], magic[1], magic[2], magic[3], *len);
         if (strncmp(Label, magic, (size_t)4) == 0)
             break; /* Found the given chunk */
-
-        if (*len == 0xffffffff && wav->isRF64==sox_true) {
-            /* Indicates invalid size */
-            lsx_fail_errno(ft, SOX_EHDR, "WAVE file has missing %s chunk",
-                          Label);
-            return SOX_EOF;
-        }
 
 	/* Chunks are required to be word aligned. */
 	if ((*len) % 2) (*len)++;
@@ -438,7 +446,8 @@ static int startread(sox_format_t * ft)
     uint32_t    len;
 
     /* wave file characteristics */
-    uint32_t      dwRiffLength;
+    uint64_t      dwRiffLength;
+    uint32_t      dwRiffLength_tmp;
     unsigned short wChannels;       /* number of channels */
     uint32_t      dwSamplesPerSecond; /* samples per second per channel */
     uint32_t      dwAvgBytesPerSec;/* estimate of bytes per second needed */
@@ -479,7 +488,7 @@ static int startread(sox_format_t * ft)
         wav->isRF64 = sox_false;
     }
 
-    lsx_readdw(ft, &dwRiffLength);
+    lsx_readdw(ft, &dwRiffLength_tmp);
 
     if (lsx_reads(ft, magic, (size_t)4) == SOX_EOF || strncmp("WAVE", magic, (size_t)4))
     {
@@ -492,9 +501,15 @@ static int startread(sox_format_t * ft)
         lsx_debug("Found ds64 header");
         /* XXX dwRiffLength not updated as it is not currently used */
 
-        lsx_skipbytes(ft, (size_t)8);
+        if (dwRiffLength_tmp==0xffffffff)
+        {
+            lsx_readqw(ft, &dwRiffLength);
+        }
+        else
+        {
+            lsx_skipbytes(ft, (size_t)8);
+        }
         lsx_readqw(ft, &dwDataLength);
-
         lsx_skipbytes(ft, (size_t)len-16);
     }
 
@@ -836,14 +851,6 @@ static int startread(sox_format_t * ft)
         return SOX_EOF;
     }
 
-    if (wav->isRF64==sox_true && len == 0xffffffff)
-    {
-        /* data length came from ds64 chunk */
-    }
-    else {
-        dwDataLength = len;
-    }
-
     if (dwDataLength == MS_UNSPEC) {
       wav->ignoreSize = 1;
       lsx_debug("WAV Chunk data's length is value often used in pipes or 4G files.  Ignoring length.");
@@ -935,7 +942,7 @@ static int startread(sox_format_t * ft)
          * doubt any machine writing Cool Edit Chunks writes them at an odd
          * offset */
         len = (len + 1) & ~1u;
-        if (!wav->isRF64 && lsx_seeki(ft, (off_t)len, SEEK_CUR) == SOX_SUCCESS &&
+        if (lsx_seeki(ft, (off_t)len, SEEK_CUR) == SOX_SUCCESS &&
             findChunk(ft, "LIST", &len) != SOX_EOF)
         {
             wav->comment = lsx_malloc((size_t)256);
