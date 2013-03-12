@@ -446,8 +446,8 @@ static int startread(sox_format_t * ft)
     uint32_t    len;
 
     /* wave file characteristics */
-    uint64_t      dwRiffLength;
-    uint32_t      dwRiffLength_tmp;
+    uint64_t      qwRiffLength;
+    uint32_t      qwRiffLength_tmp;
     unsigned short wChannels;       /* number of channels */
     uint32_t      dwSamplesPerSecond; /* samples per second per channel */
     uint32_t      dwAvgBytesPerSec;/* estimate of bytes per second needed */
@@ -455,7 +455,7 @@ static int startread(sox_format_t * ft)
     uint32_t wFmtSize;
     uint16_t wExtSize = 0;    /* extended field for non-PCM */
 
-    uint64_t      dwDataLength;    /* length of sound data in bytes */
+    uint64_t      qwDataLength;    /* length of sound data in bytes */
     size_t    bytesPerBlock = 0;
     int    bytespersample;          /* bytes per sample (per channel */
     char text[256];
@@ -488,7 +488,7 @@ static int startread(sox_format_t * ft)
         wav->isRF64 = sox_false;
     }
 
-    lsx_readdw(ft, &dwRiffLength_tmp);
+    lsx_readdw(ft, &qwRiffLength_tmp);
 
     if (lsx_reads(ft, magic, (size_t)4) == SOX_EOF || strncmp("WAVE", magic, (size_t)4))
     {
@@ -499,17 +499,17 @@ static int startread(sox_format_t * ft)
     if (wav->isRF64 && findChunk(ft, "ds64", &len) != SOX_EOF) {
 
         lsx_debug("Found ds64 header");
-        /* XXX dwRiffLength not updated as it is not currently used */
+        /* XXX qwRiffLength not updated as it is not currently used */
 
-        if (dwRiffLength_tmp==0xffffffff)
+        if (qwRiffLength_tmp==0xffffffff)
         {
-            lsx_readqw(ft, &dwRiffLength);
+            lsx_readqw(ft, &qwRiffLength);
         }
         else
         {
             lsx_skipbytes(ft, (size_t)8);
         }
-        lsx_readqw(ft, &dwDataLength);
+        lsx_readqw(ft, &qwDataLength);
         lsx_skipbytes(ft, (size_t)len-16);
     }
 
@@ -851,7 +851,7 @@ static int startread(sox_format_t * ft)
         return SOX_EOF;
     }
 
-    if (dwDataLength == MS_UNSPEC) {
+    if (qwDataLength == MS_UNSPEC) {
       wav->ignoreSize = 1;
       lsx_debug("WAV Chunk data's length is value often used in pipes or 4G files.  Ignoring length.");
     }
@@ -865,9 +865,9 @@ static int startread(sox_format_t * ft)
 
     case WAVE_FORMAT_ADPCM:
         wav->numSamples =
-            lsx_ms_adpcm_samples_in((size_t)dwDataLength, (size_t)ft->signal.channels,
+            lsx_ms_adpcm_samples_in((size_t)qwDataLength, (size_t)ft->signal.channels,
                            (size_t)wav->blockAlign, (size_t)wav->samplesPerBlock);
-        lsx_debug_more("datalen %ld, numSamples %lu",dwDataLength, (unsigned long)wav->numSamples);
+        lsx_debug_more("datalen %ld, numSamples %lu",qwDataLength, (unsigned long)wav->numSamples);
         wav->blockSamplesRemaining = 0;        /* Samples left in buffer */
         ft->signal.length = wav->numSamples*ft->signal.channels;
         break;
@@ -876,22 +876,22 @@ static int startread(sox_format_t * ft)
         /* Compute easiest part of number of samples.  For every block, there
            are samplesPerBlock samples to read. */
         wav->numSamples =
-            lsx_ima_samples_in((size_t)dwDataLength, (size_t)ft->signal.channels,
+            lsx_ima_samples_in((size_t)qwDataLength, (size_t)ft->signal.channels,
                          (size_t)wav->blockAlign, (size_t)wav->samplesPerBlock);
-        lsx_debug_more("datalen %ld, numSamples %lu",dwDataLength, (unsigned long)wav->numSamples);
+        lsx_debug_more("datalen %ld, numSamples %lu",qwDataLength, (unsigned long)wav->numSamples);
         wav->blockSamplesRemaining = 0;        /* Samples left in buffer */
         lsx_ima_init_table();
         ft->signal.length = wav->numSamples*ft->signal.channels;
         break;
 
     case WAVE_FORMAT_GSM610:
-        wav->numSamples = ((dwDataLength / wav->blockAlign) * wav->samplesPerBlock);
+        wav->numSamples = ((qwDataLength / wav->blockAlign) * wav->samplesPerBlock);
         wavgsminit(ft);
         ft->signal.length = wav->numSamples*ft->signal.channels;
         break;
 
     default:
-        wav->numSamples = div_bits(dwDataLength, ft->encoding.bits_per_sample) / ft->signal.channels;
+        wav->numSamples = div_bits(qwDataLength, ft->encoding.bits_per_sample) / ft->signal.channels;
         ft->signal.length = wav->numSamples * ft->signal.channels;
     }
      
@@ -905,7 +905,7 @@ static int startread(sox_format_t * ft)
            wav_format_str(wav->formatTag), ft->signal.channels,
            wChannels == 1 ? "" : "s", dwSamplesPerSecond);
     lsx_debug("        %d byte/sec, %d block align, %d bits/samp, %lu data bytes",
-           dwAvgBytesPerSec, wav->blockAlign, wBitsPerSample, dwDataLength);
+           dwAvgBytesPerSec, wav->blockAlign, wBitsPerSample, qwDataLength);
 
     /* Can also report extended fmt information */
     switch (wav->formatTag)
@@ -1242,9 +1242,9 @@ bytes      variable      description
 
 PCM formats then go straight to the data chunk:
 36 - 39    'data'
-40 - 43     dwDataLength   length of data chunk minus 8 byte header
-44 - (dwDataLength + 43)   the data
-(+ a padding byte if dwDataLength is odd)
+40 - 43     qwDataLength   length of data chunk minus 8 byte header
+44 - (qwDataLength + 43)   the data
+(+ a padding byte if qwDataLength is odd)
 
 non-PCM formats must write an extended format chunk and a fact chunk:
 
@@ -1254,9 +1254,9 @@ ULAW, ALAW formats:
 42 - 45    dwFactSize = 4  length of the fact chunk minus 8 byte header
 46 - 49    dwSamplesWritten   actual number of samples written out
 50 - 53    'data'
-54 - 57     dwDataLength  length of data chunk minus 8 byte header
-58 - (dwDataLength + 57)  the data
-(+ a padding byte if dwDataLength is odd)
+54 - 57     qwDataLength  length of data chunk minus 8 byte header
+58 - (qwDataLength + 57)  the data
+(+ a padding byte if qwDataLength is odd)
 
 
 GSM6.10  format:
@@ -1266,9 +1266,9 @@ GSM6.10  format:
 44 - 47    dwFactSize = 4  length of the fact chunk minus 8 byte header
 48 - 51    dwSamplesWritten   actual number of samples written out
 52 - 55    'data'
-56 - 59     dwDataLength  length of data chunk minus 8 byte header
-60 - (dwDataLength + 59)  the data (including a padding byte, if necessary,
-                            so dwDataLength is always even)
+56 - 59     qwDataLength  length of data chunk minus 8 byte header
+60 - (qwDataLength + 59)  the data (including a padding byte, if necessary,
+                            so qwDataLength is always even)
 
 
 note that header contains (up to) 3 separate ways of describing the
@@ -1279,7 +1279,7 @@ and padded compressed formats:
 wRiffLength -      (riff header) the length of the file, minus 8
 dwSamplesWritten - (fact header) the number of samples written (after padding
                    to a complete block eg for GSM)
-dwDataLength     - (data chunk header) the number of (valid) data bytes written
+qwDataLength     - (data chunk header) the number of (valid) data bytes written
 
 */
 
@@ -1308,7 +1308,7 @@ static int wavwritehdr(sox_format_t * ft, int second_header)
     uint32_t dwSamplesWritten=0;  /* windows doesnt seem to use this*/
 
     /* data chunk */
-    uint32_t  dwDataLength; /* length of sound data in bytes */
+    uint32_t  qwDataLength; /* length of sound data in bytes */
     /* end of variables written to header */
 
     /* internal variables, intermediate values etc */
@@ -1397,17 +1397,17 @@ static int wavwritehdr(sox_format_t * ft, int second_header)
         wav->numSamples > 0xffffffff) { 
         /* adjust for blockAlign */
         blocksWritten = MS_UNSPEC/wBlockAlign;
-        dwDataLength = blocksWritten * wBlockAlign;
+        qwDataLength = blocksWritten * wBlockAlign;
         dwSamplesWritten = blocksWritten * wSamplesPerBlock;
     } else {    /* fixup with real length */
         dwSamplesWritten = 
             second_header? wav->numSamples : ft->signal.length / wChannels;
         blocksWritten = (dwSamplesWritten+wSamplesPerBlock-1)/wSamplesPerBlock;
-        dwDataLength = blocksWritten * wBlockAlign;
+        qwDataLength = blocksWritten * wBlockAlign;
     }
 
     if (wFormatTag == WAVE_FORMAT_GSM610)
-        dwDataLength = (dwDataLength+1) & ~1u; /* round up to even */
+        qwDataLength = (qwDataLength+1) & ~1u; /* round up to even */
 
     if (wFormatTag == WAVE_FORMAT_PCM && (wBitsPerSample > 16 || wChannels > 2)
         && strcmp(ft->filetype, "wavpcm")) {
@@ -1417,7 +1417,7 @@ static int wavwritehdr(sox_format_t * ft, int second_header)
     else if (wFormatTag != WAVE_FORMAT_PCM)
         wFmtSize += 2+wExtSize; /* plus ExtData */
 
-    wRiffLength = 4 + (8+wFmtSize) + (8+dwDataLength+dwDataLength%2);
+    wRiffLength = 4 + (8+wFmtSize) + (8+qwDataLength+qwDataLength%2);
     if (isExtensible || wFormatTag != WAVE_FORMAT_PCM) /* PCM omits the "fact" chunk */
         wRiffLength += (8+dwFactSize);
 
@@ -1505,7 +1505,7 @@ static int wavwritehdr(sox_format_t * ft, int second_header)
     }
 
     lsx_writes(ft, "data");
-    lsx_writedw(ft, dwDataLength);               /* data chunk size */
+    lsx_writedw(ft, qwDataLength);               /* data chunk size */
 
     if (!second_header) {
         lsx_debug("Writing Wave file: %s format, %d channel%s, %d samp/sec",
@@ -1515,13 +1515,13 @@ static int wavwritehdr(sox_format_t * ft, int second_header)
                 dwAvgBytesPerSec, wBlockAlign, wBitsPerSample);
     } else {
         lsx_debug("Finished writing Wave file, %u data bytes %lu samples",
-                dwDataLength, (unsigned long)wav->numSamples);
+                qwDataLength, (unsigned long)wav->numSamples);
         if (wFormatTag == WAVE_FORMAT_GSM610){
             lsx_debug("GSM6.10 format: %li blocks %u padded samples %u padded data bytes",
-                    blocksWritten, dwSamplesWritten, dwDataLength);
-            if (wav->gsmbytecount != dwDataLength)
+                    blocksWritten, dwSamplesWritten, qwDataLength);
+            if (wav->gsmbytecount != qwDataLength)
                 lsx_warn("help ! internal inconsistency - data_written %u gsmbytecount %lu",
-                        dwDataLength, (unsigned long)wav->gsmbytecount);
+                        qwDataLength, (unsigned long)wav->gsmbytecount);
 
         }
     }
