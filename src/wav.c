@@ -407,6 +407,47 @@ static int findChunk(sox_format_t * ft, const char *Label, uint32_t *len)
             }
         }
 
+
+    /* Hideous work around for a bug in libsndfile
+     * https://github.com/erikd/libsndfile/commit/7fa1c57c37844a9d44642ea35e6638238b8af19e#src/rf64.c
+     */
+    if ((*len) == 0x20 && strncmp(Label, "ds64", (size_t)4)==0)
+    {
+        char other_magic[5];
+        off_t here;
+
+        here = lsx_tell(ft);
+
+        lsx_debug("Attempting work around for bad ds64 length bug");
+        other_magic[4] = '\0';
+
+        /* Skip over all but the last four bytes */
+        if (lsx_seeki(ft, (off_t)(*len)-4, SEEK_CUR) != SOX_SUCCESS)
+        {
+            lsx_fail_errno(ft, SOX_EHDR, "WAV chunk appears to have invalid size %d.", *len);
+            return SOX_EOF;
+        }
+
+        /* Get the last four bytes to see if it is an "fmt " chunk */
+        if (lsx_reads(ft, other_magic, (size_t)4) == SOX_EOF)
+        {
+            lsx_fail_errno(ft,SOX_EHDR, "WAV chunk appears to have invalid size %d.", *len);
+            return SOX_EOF;
+        }
+
+        /* Seek back to where we were, which won't work if you're piping */
+        if (lsx_seeki(ft, here, SEEK_SET)!=SOX_SUCCESS)
+        {
+            lsx_fail_errno(ft,SOX_EHDR, "Cannot seek backwards to work around possible broken header.");
+            return SOX_EOF;
+        }
+        if (strcmp(other_magic, "fmt ")==0)
+        {
+            lsx_debug("File had libsndfile bug, working around tell=%ld", lsx_tell(ft));
+            *len -= 4;
+        }
+    }
+
         lsx_debug("WAV Chunk %2x %2x %2x %2x size=%x", magic[0], magic[1], magic[2], magic[3], *len);
         if (strncmp(Label, magic, (size_t)4) == 0)
             break; /* Found the given chunk */
